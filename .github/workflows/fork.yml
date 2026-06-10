@@ -1,0 +1,80 @@
+name: fork
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BIN_DIR: ${{ github.workspace }}/bin
+  BUILD_DIR: ${{ github.workspace }}/build
+  INSTALL_PREFIX: ${{ github.workspace }}/nvim-install
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Install pre-built wasmtime C API
+        run: |
+          mkdir -p /tmp/wasmtime-sdk
+          curl -sL "https://github.com/bytecodealliance/wasmtime/releases/download/v36.0.9/wasmtime-v36.0.9-x86_64-linux-c-api.tar.xz" \
+            | tar -xJf - --strip-components=1 -C /tmp/wasmtime-sdk
+          sudo cp -r /tmp/wasmtime-sdk/include/. /usr/local/include/
+          sudo install -m 644 /tmp/wasmtime-sdk/lib/libwasmtime.a /usr/local/lib/
+
+      - name: Build third-party deps with wasmtime
+        run: |
+          cmake -S cmake.deps -B .deps -G Ninja \
+            -D CMAKE_BUILD_TYPE=Release \
+            -D ENABLE_WASMTIME=ON \
+            -D USE_BUNDLED_WASMTIME=OFF
+          cmake --build .deps
+
+      - name: Build neovim
+        run: |
+          cmake -B build -G Ninja \
+            -D CMAKE_BUILD_TYPE=Release \
+            -D ENABLE_WASMTIME=ON \
+            -D CI_BUILD=ON
+          cmake --build build
+
+      - name: Run unit tests
+        run: cmake --build build --target unittest
+
+      - name: Package
+        run: cpack --config build/CPackConfig.cmake -G TGZ
+
+      - name: Rename archive
+        run: |
+          mv build/nvim-linux-x86_64.tar.gz /tmp/nvim-linux-x86_64.tar.gz
+
+      - name: Upload to rolling release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes="Rolling release — updated on every push to master."
+          gh release create latest \
+            --title "Latest Build" \
+            --notes "$notes" \
+            --prerelease \
+            /tmp/nvim-linux-x86_64.tar.gz \
+            2>/dev/null || \
+          (gh release upload latest \
+            /tmp/nvim-linux-x86_64.tar.gz \
+            --clobber && \
+          gh release edit latest --notes "$notes")
