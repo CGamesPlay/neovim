@@ -673,8 +673,8 @@ void remote_ui_hl_attr_define(RemoteUI *ui, Integer id, HlAttrs rgb_attrs, HlAtt
   ADD_C(args, INTEGER_OBJ(id));
   MAXSIZE_TEMP_DICT(rgb, HLATTRS_DICT_SIZE);
   MAXSIZE_TEMP_DICT(cterm, HLATTRS_DICT_SIZE);
-  hlattrs2dict(&rgb, NULL, rgb_attrs, true, false);
-  hlattrs2dict(&cterm, NULL, rgb_attrs, false, false);
+  hlattrs2dict(&rgb, NULL, rgb_attrs, true, false, NULL);
+  hlattrs2dict(&cterm, NULL, rgb_attrs, false, false, NULL);
 
   // URLs are not added in hlattrs2dict since they are used only by UIs and not by the highlight
   // system. So we add them here.
@@ -703,7 +703,7 @@ void remote_ui_highlight_set(RemoteUI *ui, int id)
 
   ui->hl_id = id;
   MAXSIZE_TEMP_DICT(dict, HLATTRS_DICT_SIZE);
-  hlattrs2dict(&dict, NULL, syn_attr2entry(id), ui->rgb, false);
+  hlattrs2dict(&dict, NULL, syn_attr2entry(id), ui->rgb, false, NULL);
   MAXSIZE_TEMP_ARRAY(args, 1);
   ADD_C(args, DICT_OBJ(dict));
   push_call(ui, "highlight_set", args);
@@ -934,7 +934,7 @@ static Array translate_contents(RemoteUI *ui, Array contents, Arena *arena)
     int attr = (int)item.items[0].data.integer;
     if (attr) {
       Dict rgb_attrs = arena_dict(arena, HLATTRS_DICT_SIZE);
-      hlattrs2dict(&rgb_attrs, NULL, syn_attr2entry(attr), ui->rgb, false);
+      hlattrs2dict(&rgb_attrs, NULL, syn_attr2entry(attr), ui->rgb, false, NULL);
       ADD_C(new_item, DICT_OBJ(rgb_attrs));
     } else {
       ADD_C(new_item, DICT_OBJ((Dict)ARRAY_DICT_INIT));

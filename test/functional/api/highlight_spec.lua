@@ -370,6 +370,47 @@ describe('API: set highlight', function()
     eq('JetBrains Mono', hl.font)
     eq(65280, hl.bg)
   end)
+
+  it('font-only highlight in global namespace is not silently dropped', function()
+    -- A font-only group must register an attr entry even when ns_id == 0.
+    api.nvim_set_hl(0, 'TestFontOnly', { font = 'Monaspace Xenon' })
+    local hl = api.nvim_get_hl(0, { name = 'TestFontOnly' })
+    eq('Monaspace Xenon', hl.font)
+  end)
+
+  it('font persists across highlight_changed / redraw cycles', function()
+    -- sg_font must be stored so set_hl_attr() can rebuild the font on redraw.
+    api.nvim_set_hl(0, 'TestFontRedraw', { fg = '#ff0000', font = 'Courier New 10' })
+    command('redraw')
+    local hl = api.nvim_get_hl(0, { name = 'TestFontRedraw' })
+    eq('Courier New 10', hl.font)
+    eq(16711680, hl.fg)
+  end)
+
+  it('font is preserved when update=true does not re-specify font', function()
+    -- update=true must inherit the base group's font when font is not re-specified.
+    api.nvim_set_hl(0, 'TestFontUpdate', { fg = '#ff0000', font = 'Courier New 10' })
+    api.nvim_set_hl(0, 'TestFontUpdate', { italic = true, update = true })
+    local hl = api.nvim_get_hl(0, { name = 'TestFontUpdate' })
+    eq('Courier New 10', hl.font)
+    eq(true, hl.italic)
+    eq(16711680, hl.fg)
+  end)
+
+  it('higher-priority overlapping extmark font wins in combined cell', function()
+    -- The higher-priority overlapping group's font must win in a combined cell.
+    api.nvim_set_hl(0, 'FontLo', { fg = '#ffffff', font = 'Courier New 10' })
+    api.nvim_set_hl(0, 'FontHi', { fg = '#ff00ff', font = 'Monaco' })
+    local buf = api.nvim_get_current_buf()
+    local ns = api.nvim_create_namespace('test_font_combine')
+    api.nvim_buf_set_lines(buf, 0, -1, false, { 'hello' })
+    api.nvim_buf_set_extmark(buf, ns, 0, 0, { end_col = 1, hl_group = 'FontLo', priority = 100 })
+    api.nvim_buf_set_extmark(buf, ns, 0, 0, { end_col = 1, hl_group = 'FontHi', priority = 200 })
+    command('redraw')
+    local cell = select(2, unpack(api.nvim__inspect_cell(1, 0, 0)))
+    eq(16711935, cell.foreground) -- #ff00ff from FontHi
+    eq('Monaco', cell.font) -- font from FontHi, not FontLo
+  end)
 end)
 
 describe('API: get highlight', function()

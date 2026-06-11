@@ -989,6 +989,14 @@ void set_hl_group(int id, HlAttrs attrs, Dict(highlight) *dict, int link_id)
     g->sg_blend = -1;
   }
 
+  if (HAS_KEY(dict, highlight, font)) {
+    xfree(g->sg_font);
+    String str = dict->font;
+    g->sg_font = (str.size > 0 && STRICMP(str.data, "NONE") != 0) ? xstrdup(str.data) : NULL;
+  } else if (!update) {
+    XFREE_CLEAR(g->sg_font);
+  }
+
   g->sg_script_ctx = current_sctx;
   g->sg_script_ctx.sc_lnum += SOURCING_LNUM;
   nlua_set_sctx(&g->sg_script_ctx);
@@ -1676,8 +1684,8 @@ static bool hlgroup2dict(Dict *hl, NS ns_id, int hl_id, Arena *arena)
     PUT_C(*hl, "link", CSTR_AS_OBJ(hl_table[link - 1].sg_name));
   }
   Dict hl_cterm = arena_dict(arena, HLATTRS_DICT_SIZE);
-  hlattrs2dict(hl, NULL, attr, true, true);
-  hlattrs2dict(hl, &hl_cterm, attr, false, true);
+  hlattrs2dict(hl, NULL, attr, true, true, arena);
+  hlattrs2dict(hl, &hl_cterm, attr, false, true, arena);
   if (kv_size(hl_cterm)) {
     PUT_C(*hl, "cterm", DICT_OBJ(hl_cterm));
   }

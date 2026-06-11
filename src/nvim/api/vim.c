@@ -2042,8 +2042,12 @@ Array nvim__inspect_cell(Integer grid, Integer row, Integer col, Arena *arena, E
   schar_get(sc_buf, g->chars[off]);
   ADD_C(ret, CSTR_AS_OBJ(sc_buf));
   int attr = g->attrs[off];
+  // hl_get_attr_by_id() copies the font name into the arena, so the dict stays
+  // valid even though highlight_use_hlstate() below may free the font table.
   ADD_C(ret, DICT_OBJ(hl_get_attr_by_id(attr, true, arena, err)));
-  // will not work first time
+  // hl_inspect() needs the semantic hlstate info, which is only recorded once
+  // hlstate is active. Activating it rebuilds the attr tables, so the inspect
+  // data is unavailable until the next redraw repaints the cell.
   if (!highlight_use_hlstate()) {
     ADD_C(ret, ARRAY_OBJ(hl_inspect(attr, arena)));
   }

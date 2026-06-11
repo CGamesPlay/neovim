@@ -149,7 +149,7 @@ int hl_get_syn_attr(int ns_id, int idx, HlAttrs at_en)
   if (at_en.cterm_fg_color != 0 || at_en.cterm_bg_color != 0
       || at_en.rgb_fg_color != -1 || at_en.rgb_bg_color != -1
       || at_en.rgb_sp_color != -1 || at_en.cterm_ae_attr != 0
-      || at_en.rgb_ae_attr != 0 || ns_id != 0) {
+      || at_en.rgb_ae_attr != 0 || at_en.font >= 0 || ns_id != 0) {
     return get_attr_entry((HlEntry){ .attr = at_en, .kind = kHlSyntax,
                                      .id1 = idx, .id2 = ns_id });
   }
@@ -703,6 +703,10 @@ int hl_combine_attr(int char_attr, int prim_attr)
     new_en.url = prim_aep.url;
   }
 
+  if (prim_aep.font >= 0) {
+    new_en.font = prim_aep.font;
+  }
+
   id = get_attr_entry((HlEntry){ .attr = new_en, .kind = kHlCombine,
                                  .id1 = char_attr, .id2 = prim_attr });
   if (id > 0) {
@@ -942,7 +946,7 @@ Dict hl_get_attr_by_id(Integer attr_id, Boolean rgb, Arena *arena, Error *err)
     return dic;
   }
   Dict retval = arena_dict(arena, HLATTRS_DICT_SIZE);
-  hlattrs2dict(&retval, NULL, syn_attr2entry((int)attr_id), rgb, false);
+  hlattrs2dict(&retval, NULL, syn_attr2entry((int)attr_id), rgb, false, arena);
   return retval;
 }
 
@@ -953,7 +957,10 @@ Dict hl_get_attr_by_id(Integer attr_id, Boolean rgb, Arena *arena, Error *err)
 /// @param use_rgb use 'gui*' settings if true, else resorts to 'cterm*'
 /// @param short_keys change (foreground, background, special) to (fg, bg, sp) for 'gui*' settings
 ///                          (foreground, background) to (ctermfg, ctermbg) for 'cterm*' settings
-void hlattrs2dict(Dict *hl, Dict *hl_attrs, HlAttrs ae, bool use_rgb, bool short_keys)
+/// @param arena if non-NULL, the font name is copied into it so the dict owns it; otherwise the
+///              font name aliases the interned font table and the dict must be consumed before that
+///              table changes.
+void hlattrs2dict(Dict *hl, Dict *hl_attrs, HlAttrs ae, bool use_rgb, bool short_keys, Arena *arena)
 {
   hl_attrs = hl_attrs ? hl_attrs : hl;
   assert(hl->capacity >= HLATTRS_DICT_SIZE);  // at most 24 items
@@ -1061,7 +1068,8 @@ void hlattrs2dict(Dict *hl, Dict *hl_attrs, HlAttrs ae, bool use_rgb, bool short
   }
   const char *font = hl_get_font(ae.font);
   if (font != NULL) {
-    PUT_C(*hl, "font", STRING_OBJ(cstr_as_string(font)));
+    String font_str = arena ? cstr_as_string(arena_strdup(arena, font)) : cstr_as_string(font);
+    PUT_C(*hl, "font", STRING_OBJ(font_str));
   }
 }
 
@@ -1077,6 +1085,7 @@ HlAttrs dict2hlattrs(Dict(highlight) *dict, bool use_rgb, int *link_id, HlAttrs 
   int blend = base ? base->hl_blend : -1;
   int32_t mask = base ? base->rgb_ae_attr : 0;
   int32_t cterm_mask = base ? base->cterm_ae_attr : 0;
+  int32_t font = base ? base->font : -1;
   bool cterm_mask_provided = false;
 
 #define CHECK_FLAG_WITH_KEY(d, m, name, extra, flag) \
@@ -1239,10 +1248,9 @@ HlAttrs dict2hlattrs(Dict(highlight) *dict, bool use_rgb, int *link_id, HlAttrs 
 
   if (HAS_KEY_X(dict, font)) {
     String str = dict->font;
-    if (str.size > 0 && STRICMP(str.data, "NONE") != 0) {
-      hlattrs.font = hl_add_font_idx(str.data);
-    }
+    font = (str.size > 0 && STRICMP(str.data, "NONE") != 0) ? hl_add_font_idx(str.data) : -1;
   }
+  hlattrs.font = font;
 
   return hlattrs;
 #undef HAS_KEY_X
