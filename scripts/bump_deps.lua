@@ -101,7 +101,12 @@ local function get_release_artifact_info(repo, ref, filename)
   local temp_dir = os.getenv('TMPDIR') or os.getenv('TEMP') or '/tmp'
 
   local artifact_path = temp_dir .. '/' .. filename
-  local artifact_url = 'https://github.com/' .. repo .. '/releases/download/' .. ref .. '/' .. filename
+  local artifact_url = 'https://github.com/'
+    .. repo
+    .. '/releases/download/'
+    .. ref
+    .. '/'
+    .. filename
 
   run_die(
     { 'curl', '-sfL', artifact_url, '-o', artifact_path },
